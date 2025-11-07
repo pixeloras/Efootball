@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>eFootball Tournament Hub (Secure Admin)</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Load Firebase SDKs -->
+    <script type="module">
+        // NOTE: We rely on these specific v11 SDK imports for the application structure
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, deleteDoc, onSnapshot, collection, getDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global Firebase variables for use in <script> block
+        window.initializeApp = initializeApp;
+        window.getAuth = getAuth;
+        window.signInAnonymously = signInAnonymously;
+        window.signInWithCustomToken = signInWithCustomToken;
+        window.onAuthStateChanged = onAuthStateChanged;
+        window.signInWithEmailAndPassword = signInWithEmailAndPassword;
+        window.signOut = signOut;
+        window.getFirestore = getFirestore;
+        window.doc = doc;
+        window.setDoc = setDoc;
+        window.deleteDoc = deleteDoc;
+        window.onSnapshot = onSnapshot;
+        window.collection = collection;
+        window.getDoc = getDoc;
+        window.setLogLevel = setLogLevel;
+    </script>
+
+    <!-- Configure Tailwind with custom theme -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'efootball-blue': '#0057E7',
+                        'efootball-dark': '#1A1A2E',
+                        'accent-green': '#28A745',
+                        'accent-red': '#DC3545',
+                        'accent-yellow': '#FFC107',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                },
+            },
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8;
+            min-height: 100vh;
+        }
+        .card-hover:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1);
+        }
+        .btn-base {
+            transition: all 0.2s ease-in-out;
+        }
+        .input-field {
+            @apply w-full p-3 border border-gray-300 rounded-lg focus:ring-efootball-blue focus:border-efootball-blue transition duration-150;
+        }
+    </style>
+</head>
+<body class="p-4 sm:p-8">
+
+    <main class="max-w-4xl mx-auto">
+        
+        <!-- App Header with View Switcher -->
+        <header class="text-center mb-6 py-4 bg-white rounded-xl shadow-lg flex justify-between items-center px-6 sm:px-8">
+            <h1 class="text-2xl sm:text-3xl font-extrabold text-efootball-dark">
+                eFootball Hub
+            </h1>
+            <div class="flex items-center space-x-3">
+                <button onclick="switchView('public')" id="public-btn" class="text-sm font-medium text-white py-2 px-4 rounded-lg bg-efootball-blue hover:bg-blue-700 transition">
+                    Registration Hub
+                </button>
+                <button onclick="switchView('admin')" id="admin-btn" class="text-sm font-medium text-gray-700 py-2 px-4 rounded-lg bg-gray-200 hover:bg-gray-300 transition">
+                    Admin Panel
+                </button>
+            </div>
+        </header>
+
+        <!-- Dynamic Content Area -->
+        <div id="content-area">
+            
+            <!-- Loading/Error Indicator -->
+            <div id="loading-indicator" class="text-center p-8 bg-white rounded-xl shadow-md">
+                <p class="text-lg text-efootball-blue font-semibold">Loading App and Authenticating...</p>
+            </div>
+
+            <!-- ADMIN LOGIN VIEW -->
+            <div id="admin-login-view" class="hidden max-w-md mx-auto bg-white p-8 rounded-xl shadow-2xl space-y-4">
+                <h2 class="text-2xl font-bold text-efootball-dark text-center">Admin Login Required</h2>
+                <p class="text-gray-500 text-center text-sm mb-6">
+                    **CRITICAL STEP:** Ensure this user is created in the **Firebase Console Auth** tab, using the exact case below:
+                    <br><span class="font-bold text-efootball-blue">Email: `nabeelahammedulkabeer@gmail.com` (lowercase)</span>
+                    <br><span class="font-bold text-efootball-blue">Password: `1234567890`</span>
+                </p>
+
+                <div id="login-message" class="hidden p-3 rounded-lg text-sm font-medium text-center bg-red-100 text-red-700"></div>
+                
+                <form id="login-form" class="space-y-4">
+                    <div>
+                        <label for="login-email" class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                        <!-- PRE-FILLED with user's lowercase email -->
+                        <input type="email" id="login-email" required value="nabeelahammedulkabeer@gmail.com" class="input-field">
+                    </div>
+                    
+                    <!-- Password input with toggle button -->
+                    <div class="relative">
+                        <label for="login-password" class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                        <!-- PRE-FILLED placeholder with user's password -->
+                        <input type="password" id="login-password" required value="1234567890" class="input-field pr-10">
+                        <button type="button" id="password-toggle" onclick="window.togglePasswordVisibility()" class="absolute right-0 flex items-center pr-3" style="top: 36px;">
+                            <svg id="toggle-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye-off text-gray-400 hover:text-gray-600 transition">
+                                <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.749 9.749 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <!-- END: Password input with toggle button -->
+
+                    <button type="submit" class="btn-base w-full py-3 px-4 bg-efootball-blue text-white font-bold rounded-lg hover:bg-blue-700">
+                        Log In
+                    </button>
+                </form>
+            </div>
+
+            <!-- PUBLIC VIEW: Tournament List & Registration -->
+            <div id="public-view" class="hidden">
+                <section id="list-view" class="grid grid-cols-1 md:grid-cols-2 gap-6"></section>
+                <section id="detail-view" class="hidden max-w-xl mx-auto bg-white p-6 sm:p-8 rounded-xl shadow-2xl border border-gray-100"></section>
+            </div>
+            
+            <!-- ADMIN VIEW: Tournament Management -->
+            <div id="admin-view" class="hidden p-6 bg-white rounded-xl shadow-2xl">
+                <div class="flex justify-between items-center mb-6 border-b pb-2">
+                    <h2 class="text-2xl font-bold text-efootball-blue">Admin Panel: Manage Tournaments</h2>
+                    <button onclick="logoutAdmin()" class="text-sm font-medium text-white py-2 px-4 rounded-lg bg-accent-red hover:bg-red-700 transition">
+                        Sign Out
+                    </button>
+                </div>
+                <p class="text-sm text-gray-500 mb-4">Current User ID (Admin): <span id="user-id-display" class="font-mono text-xs bg-gray-100 p-1 rounded">N/A</span></p>
+
+                <!-- Add/Edit Form -->
+                <form id="admin-form" class="space-y-4 mb-8 p-4 border border-efootball-blue rounded-lg bg-blue-50">
+                    <input type="hidden" id="tournament-id-edit" value="">
+                    <h3 class="text-xl font-bold text-efootball-dark" id="form-title">Add New Tournament</h3>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <input type="text" id="admin-title" placeholder="Tournament Title (e.g., PS5 Global eCup)" required class="input-field">
+                        <input type="text" id="admin-game" placeholder="Game (e.g., eFootball 2025)" required class="input-field">
+                        <input type="text" id="admin-platform" placeholder="Platform (e.g., PlayStation 5)" required class="input-field">
+                        <input type="date" id="admin-date" required class="input-field">
+                        <input type="number" id="admin-fee" placeholder="Entry Fee (e.g., 10)" value="0" required class="input-field">
+                        <input type="text" id="admin-prize" placeholder="Prize Pool (e.g., $500)" required class="input-field">
+                        <select id="admin-status" required class="input-field appearance-none bg-white">
+                            <option value="Open">Open (Register Now)</option>
+                            <option value="Upcoming">Upcoming (Coming Soon)</option>
+                            <option value="Closed">Closed</option>
+                        </select>
+                        <input type="date" id="admin-deadline" required class="input-field">
+                    </div>
+                    
+                    <div class="flex space-x-4 pt-2">
+                        <button type="submit" id="admin-submit-btn" class="btn-base w-full py-3 px-4 bg-accent-green text-white font-bold rounded-lg hover:bg-green-600">
+                            Save Tournament
+                        </button>
+                        <button type="button" onclick="resetForm()" class="btn-base py-3 px-4 bg-gray-500 text-white font-bold rounded-lg hover:bg-gray-600">
+                            Clear
+                        </button>
+                    </div>
+                </form>
+
+                <!-- Tournament List -->
+                <div id="admin-list">
+                    <h3 class="text-xl font-bold text-efootball-dark mb-4">Existing Tournaments</h3>
+                    <div id="admin-list-container" class="space-y-3">
+                        <p class="text-gray-500">Loading tournaments...</p>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <script type="module">
+        // =====================================================================================
+        // CRITICAL: Ensure this user is created with the EXACT case-sensitive values in Firebase Auth.
+        // =====================================================================================
+        const ADMIN_EMAIL = 'nabeelahammedulkabeer@gmail.com'; 
+        const ADMIN_PASSWORD = '1234567890'; 
+        
+        // --- FIREBASE INITIALIZATION & AUTH ---
+        window.setLogLevel('debug');
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'esports-655bf'; 
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        if (!firebaseConfig) {
+            console.error("Firebase configuration is missing.");
+            document.getElementById('loading-indicator').innerHTML = '<p class="text-red-600">Error: Firebase configuration not found. Check Console setup.</p>';
+        }
+
+        let db, auth, userId = null;
+        let isAdmin = false;
+        let tournamentsCollection;
+        let tournamentsData = [];
+        let isAuthReady = false;
+
+        /**
+         * Initializes Firebase and authenticates the user.
+         */
+        const initializeAndAuthenticate = async () => {
+            try {
+                const app = window.initializeApp(firebaseConfig);
+                db = window.getFirestore(app);
+                auth = window.getAuth(app);
+                
+                // Sign in with custom token (platform managed) or anonymously (fallback)
+                if (initialAuthToken) {
+                    await window.signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await window.signInAnonymously(auth);
+                }
+
+                window.onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        // Check if the current user is the admin (only possible if signed in via email/password)
+                        // Note: user.email is usually normalized to lowercase by Firebase
+                        isAdmin = user.email === ADMIN_EMAIL;
+                        
+                        document.getElementById('user-id-display').textContent = userId;
+                        tournamentsCollection = window.collection(db, `/artifacts/${appId}/public/data/tournaments`);
+                        isAuthReady = true;
+                        
+                        // Start listening for data and show the appropriate view
+                        listenForTournaments();
+                        switchView('public');
+                        document.getElementById('loading-indicator').classList.add('hidden');
+                    } else {
+                         // Fallback for anonymous user sign-in failure, though custom token should prevent this
+                        document.getElementById('loading-indicator').innerHTML = '<p class="text-red-600">Authentication required for core services.</p>';
+                    }
+                });
+
+            } catch (error) {
+                console.error("Error during Firebase initialization or sign-in:", error);
+                document.getElementById('loading-indicator').innerHTML = `<p class="text-red-600">Fatal Error: ${error.message}</p>`;
+            }
+        };
+
+        /**
+         * Handles the admin login form submission.
+         */
+        const handleAdminLogin = async (event) => {
+            event.preventDefault();
+            // Get email and password from the form inputs
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
+            const messageBox = document.getElementById('login-message');
+            messageBox.classList.add('hidden');
+            
+            // Console log the credentials being used for debugging in the browser console
+            console.log(`Attempting login with: Email=${email}, Password=${password}`);
+
+            try {
+                // Attempt to sign in with email and password
+                await window.signInWithEmailAndPassword(auth, email, password);
+                
+                // If successful, the onAuthStateChanged listener will fire, updating the isAdmin status.
+                switchView('admin');
+
+            } catch (error) {
+                console.error("Login error:", error.code, error.message);
+                
+                let friendlyMessage = "Login failed. Please check your email and password in the form.";
+                if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+                    friendlyMessage = "Invalid credentials. Please verify the user exists with the *exact* email and password in the Firebase Console.";
+                }
+
+                messageBox.textContent = friendlyMessage;
+                messageBox.classList.remove('hidden');
+            }
+        };
+
+        /**
+         * Toggles the visibility of the login password field.
+         */
+        const togglePasswordVisibility = () => {
+            const passwordInput = document.getElementById('login-password');
+            const toggleButton = document.getElementById('password-toggle');
+            
+            if (passwordInput.type === 'password') {
+                passwordInput.type = 'text';
+                // Change button content to "Eye" icon (visible, click to hide)
+                toggleButton.innerHTML = `
+                    <svg id="toggle-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye text-gray-400 hover:text-gray-600 transition">
+                        <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>
+                    </svg>
+                `;
+            } else {
+                passwordInput.type = 'password';
+                // Change button content to "Eye-Off" icon (hidden, click to show)
+                toggleButton.innerHTML = `
+                    <svg id="toggle-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye-off text-gray-400 hover:text-gray-600 transition">
+                        <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.749 9.749 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/>
+                    </svg>
+                `;
+            }
+        };
+
+
+        /**
+         * Logs out the admin user and switches to public view.
+         */
+        const logoutAdmin = async () => {
+            try {
+                await window.signOut(auth);
+                isAdmin = false;
+                // Sign back in anonymously for public functionality
+                await window.signInAnonymously(auth);
+                switchView('public');
+                document.getElementById('admin-btn').classList.remove('bg-efootball-blue', 'text-white');
+                document.getElementById('admin-btn').classList.add('bg-gray-200', 'text-gray-700');
+                
+            } catch (error) {
+                console.error("Error signing out:", error);
+            }
+        };
+
+        // --- PUBLIC VIEW LOGIC ---
+        const getStatusBadge = (status) => {
+            let color, text, cursor = 'cursor-pointer';
+            if (status === 'Open') {
+                color = 'bg-accent-green text-white';
+                text = 'REGISTER NOW';
+            } else if (status === 'Upcoming') {
+                color = 'bg-accent-yellow text-efootball-dark';
+                text = 'COMING SOON';
+                cursor = 'cursor-not-allowed';
+            } else { // Closed
+                color = 'bg-accent-red text-white';
+                text = 'CLOSED';
+                cursor = 'cursor-not-allowed opacity-75';
+            }
+            return `<div class="text-xs font-bold py-1 px-3 rounded-full ${color} ${cursor}">${text}</div>`;
+        };
+
+        const renderTournamentList = () => {
+            const listView = document.getElementById('list-view');
+            if (tournamentsData.length === 0) {
+                listView.innerHTML = `<p class="text-center text-gray-500 mt-10">No tournaments currently available. Check back soon!</p>`;
+                return;
+            }
+            let html = '';
+            const sortedTournaments = [...tournamentsData].sort((a, b) => {
+                const order = { 'Open': 1, 'Upcoming': 2, 'Closed': 3 };
+                return order[a.status] - order[b.status];
+            });
+
+            sortedTournaments.forEach(t => {
+                const isClickable = t.status === 'Open';
+                html += `
+                    <div data-id="${t.id}" 
+                         class="bg-white p-6 rounded-xl shadow-md border border-gray-200 
+                         ${isClickable ? 'card-hover transition transform duration-300 cursor-pointer' : 'opacity-80'}"
+                         ${isClickable ? 'onclick="window.showRegistrationForm(\'' + t.id + '\')"' : ''}>
+                        
+                        <div class="flex justify-between items-start mb-3">
+                            <h3 class="text-xl font-bold text-efootball-dark">${t.title}</h3>
+                            ${getStatusBadge(t.status)}
+                        </div>
+
+                        <p class="text-sm text-gray-500 mb-4">${t.game} | ${t.platform}</p>
+
+                        <div class="grid grid-cols-3 gap-2 text-center border-t pt-4">
+                            <div><p class="text-xs text-gray-500">Date</p><p class="font-semibold text-sm">${t.date}</p></div>
+                            <div><p class="text-xs text-gray-500">Entry</p><p class="font-semibold text-sm">${t.fee == 0 ? 'FREE' : '$' + t.fee}</p></div>
+                            <div><p class="text-xs text-gray-500">Prize Pool</p><p class="font-semibold text-sm text-efootball-blue">${t.prize}</p></div>
+                        </div>
+                    </div>
+                `;
+            });
+            listView.innerHTML = html;
+        };
+
+        const showRegistrationForm = (id) => {
+            const detailView = document.getElementById('detail-view');
+            const tournament = tournamentsData.find(t => t.id === id);
+            
+            if (!tournament || tournament.status !== 'Open') return;
+
+            document.getElementById('list-view').classList.add('hidden');
+            detailView.classList.remove('hidden');
+
+            detailView.innerHTML = `
+                <button onclick="window.showList()" class="btn-base mb-4 inline-flex items-center text-sm font-medium text-gray-600 hover:text-efootball-blue">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                    </svg>
+                    Back to Tournament List
+                </button>
+
+                <h2 class="text-2xl font-bold text-efootball-dark mb-1">${tournament.title}</h2>
+                <p class="text-sm text-gray-500 mb-6">${tournament.game} on ${tournament.platform} | Entry Fee: $${tournament.fee}</p>
+
+                <div id="registration-message-box" class="mb-4 p-4 rounded-lg text-center font-semibold hidden" role="alert"></div>
+
+                <form id="registration-form" data-tournament-id="${id}" class="space-y-4">
+                    
+                    <div><label for="reg-fullName" class="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                        <input type="text" id="reg-fullName" name="fullName" required class="input-field"></div>
+                    <div><label for="reg-gamertag" class="block text-sm font-medium text-gray-700 mb-1">Online Gamertag / ID</label>
+                        <input type="text" id="reg-gamertag" name="gamertag" required placeholder="e.g., KingOfDribble_07" class="input-field"></div>
+                    <div><label for="reg-email" class="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+                        <input type="email" id="reg-email" name="email" required class="input-field"></div>
+
+                    <div class="flex items-start pt-2">
+                        <input type="checkbox" id="reg-terms" name="terms" required class="mt-1 h-4 w-4 text-accent-green border-gray-300 rounded focus:ring-accent-green">
+                        <label for="reg-terms" class="ml-2 block text-sm text-gray-900 select-none">I agree to the rules for the ${tournament.title}.</label>
+                    </div>
+
+                    <div class="pt-4">
+                        <button type="submit" class="btn-base w-full py-3 px-4 bg-accent-green text-white font-bold text-lg rounded-lg shadow-md hover:bg-green-600">
+                            Confirm Registration ($${tournament.fee} Fee)
+                        </button>
+                    </div>
+                </form>
+            `;
+
+            document.getElementById('registration-form').addEventListener('submit', handleRegistrationSubmit);
+        };
+
+        const handleRegistrationSubmit = (event) => {
+            event.preventDefault(); 
+            const form = event.target;
+            const tournamentId = form.getAttribute('data-tournament-id');
+            const tournament = tournamentsData.find(t => t.id === tournamentId);
+            const messageBox = document.getElementById('registration-message-box');
+
+            const formData = new FormData(form);
+            const data = Object.fromEntries(formData.entries());
+
+            messageBox.classList.remove('hidden');
+            messageBox.classList.add('bg-green-100', 'text-green-800');
+            messageBox.innerHTML = `
+                <p class="text-xl mb-2">🎉 Registered for ${tournament.title}!</p>
+                <p>A confirmation has been sent to ${data.email}.</p>
+                <p class="text-sm mt-1">Please proceed with payment of $${tournament.fee} if required.</p>
+            `;
+            
+            form.querySelectorAll('input, button').forEach(el => el.disabled = true);
+            form.querySelector('button').classList.remove('hover:bg-green-600');
+            form.querySelector('button').textContent = "Registered!";
+
+            console.log(`Public Registration Data for Tournament #${tournamentId}:`, JSON.stringify(data, null, 2));
+        };
+
+        const showList = () => {
+            document.getElementById('detail-view').classList.add('hidden');
+            document.getElementById('list-view').classList.remove('hidden');
+        };
+        
+        // --- ADMIN VIEW LOGIC ---
+        const renderAdminList = () => {
+            const container = document.getElementById('admin-list-container');
+            if (tournamentsData.length === 0) {
+                container.innerHTML = `<p class="text-gray-500">No tournaments created yet.</p>`;
+                return;
+            }
+
+            let html = '';
+            tournamentsData.forEach(t => {
+                html += `
+                    <div class="flex justify-between items-center p-3 bg-gray-50 border rounded-lg shadow-sm">
+                        <div class="flex-1 min-w-0 mr-4">
+                            <p class="font-bold text-efootball-dark truncate">${t.title} (${t.platform})</p>
+                            <p class="text-xs text-gray-500">${t.date} | Status: <span class="font-semibold text-accent-green">${t.status}</span></p>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button onclick="window.editTournament('${t.id}')" class="text-sm text-efootball-blue hover:text-blue-700 font-medium transition">Edit</button>
+                            <button onclick="window.deleteTournament('${t.id}', '${t.title}')" class="text-sm text-accent-red hover:text-red-700 font-medium transition">Delete</button>
+                        </div>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        };
+        
+        const editTournament = (id) => {
+            const tournament = tournamentsData.find(t => t.id === id);
+            if (!tournament) return;
+
+            document.getElementById('tournament-id-edit').value = id;
+            document.getElementById('admin-title').value = tournament.title;
+            document.getElementById('admin-game').value = tournament.game;
+            document.getElementById('admin-platform').value = tournament.platform;
+            document.getElementById('admin-date').value = tournament.date;
+            document.getElementById('admin-fee').value = tournament.fee;
+            document.getElementById('admin-prize').value = tournament.prize;
+            document.getElementById('admin-status').value = tournament.status;
+            document.getElementById('admin-deadline').value = tournament.deadline;
+
+            document.getElementById('form-title').textContent = `Edit Tournament: ${tournament.title}`;
+            document.getElementById('admin-submit-btn').textContent = "Update Tournament";
+        };
+
+        const resetForm = () => {
+            document.getElementById('admin-form').reset();
+            document.getElementById('tournament-id-edit').value = '';
+            document.getElementById('form-title').textContent = "Add New Tournament";
+            document.getElementById('admin-submit-btn').textContent = "Save Tournament";
+        };
+
+        const handleAdminSubmit = async (event) => {
+            event.preventDefault();
+            const form = event.target;
+            const id = document.getElementById('tournament-id-edit').value || window.crypto.randomUUID();
+
+            const tournamentData = {
+                title: form.elements['admin-title'].value,
+                game: form.elements['admin-game'].value,
+                platform: form.elements['admin-platform'].value,
+                date: form.elements['admin-date'].value,
+                fee: parseFloat(form.elements['admin-fee'].value) || 0,
+                prize: form.elements['admin-prize'].value,
+                status: form.elements['admin-status'].value,
+                deadline: form.elements['admin-deadline'].value,
+                createdBy: userId,
+                createdAt: new Date().toISOString()
+            };
+
+            try {
+                const tournamentDocRef = window.doc(tournamentsCollection, id);
+                await window.setDoc(tournamentDocRef, tournamentData);
+                console.log("Tournament saved successfully with ID:", id);
+                resetForm();
+            } catch (e) {
+                console.error("Error writing document: ", e);
+            }
+        };
+
+        const deleteTournament = async (id, title) => {
+            console.warn(`Attempting to delete tournament: ${title} (ID: ${id}).`);
+            try {
+                const tournamentDocRef = window.doc(tournamentsCollection, id);
+                await window.deleteDoc(tournamentDocRef);
+                console.log(`Tournament ${title} deleted successfully.`);
+            } catch (e) {
+                console.error("Error removing document: ", e);
+            }
+        };
+
+
+        // --- FIREBASE REAL-TIME LISTENER ---
+        const listenForTournaments = () => {
+            if (!isAuthReady || !tournamentsCollection) {
+                console.warn("Firestore not ready. Skipping snapshot listener setup.");
+                return;
+            }
+
+            window.onSnapshot(tournamentsCollection, (snapshot) => {
+                const newTournaments = [];
+                snapshot.forEach((doc) => {
+                    newTournaments.push({ id: doc.id, ...doc.data() });
+                });
+                
+                tournamentsData = newTournaments;
+                renderTournamentList();
+                renderAdminList();
+                console.log(`Firestore Update: ${newTournaments.length} tournaments loaded.`);
+            }, (error) => {
+                console.error("Error listening to Firestore:", error);
+            });
+        };
+        
+        // --- VIEW SWITCHING LOGIC ---
+        const switchView = (viewName) => {
+            const views = {
+                'public': document.getElementById('public-view'),
+                'admin': document.getElementById('admin-view'),
+                'login': document.getElementById('admin-login-view')
+            };
+            const buttons = {
+                'public': document.getElementById('public-btn'),
+                'admin': document.getElementById('admin-btn')
+            };
+            
+            // Check admin status before switching to admin view
+            if (viewName === 'admin' && !isAdmin) {
+                viewName = 'login';
+            }
+
+            for (const view in views) {
+                if (view === viewName) {
+                    views[view].classList.remove('hidden');
+                } else {
+                    views[view].classList.add('hidden');
+                }
+            }
+
+            // Update button styles only for the main two buttons
+            for (const btn in buttons) {
+                if (btn === viewName) {
+                    buttons[btn].classList.remove('bg-gray-200', 'text-gray-700');
+                    buttons[btn].classList.add('bg-efootball-blue', 'text-white');
+                } else {
+                    buttons[btn].classList.remove('bg-efootball-blue', 'text-white');
+                    buttons[btn].classList.add('bg-gray-200', 'text-gray-700');
+                }
+            }
+        };
+
+        // --- GLOBAL EXPORTS & INITIAL RUN ---
+        window.togglePasswordVisibility = togglePasswordVisibility;
+        window.showRegistrationForm = showRegistrationForm;
+        window.handleRegistrationSubmit = handleRegistrationSubmit;
+        window.showList = showList;
+        window.switchView = switchView;
+        window.editTournament = editTournament;
+        window.deleteTournament = deleteTournament;
+        window.resetForm = resetForm;
+        window.logoutAdmin = logoutAdmin;
+
+        document.getElementById('admin-form').addEventListener('submit', handleAdminSubmit);
+        document.getElementById('login-form').addEventListener('submit', handleAdminLogin);
+        
+        initializeAndAuthenticate();
+    </script>
+</body>
+</html>
