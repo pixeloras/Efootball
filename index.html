@@ -100,7 +100,7 @@
             <div id="admin-login-view" class="hidden max-w-md mx-auto bg-white p-8 rounded-xl shadow-2xl space-y-4">
                 <h2 class="text-2xl font-bold text-efootball-dark text-center">Admin Login Required</h2>
                 <p class="text-gray-500 text-center text-sm mb-6">
-                    **CRITICAL STEP:** Ensure this user is created in the **Firebase Console Auth** tab, using the exact case below:
+                    Ensure this user is created in the **Firebase Console Auth** tab:
                     <br><span class="font-bold text-efootball-blue">Email: `nabeelahammedulkabeer@gmail.com` (lowercase)</span>
                     <br><span class="font-bold text-efootball-blue">Password: `1234567890`</span>
                 </p>
@@ -117,7 +117,7 @@
                     <!-- Password input with toggle button -->
                     <div class="relative">
                         <label for="login-password" class="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                        <!-- PRE-FILLED placeholder with user's password -->
+                        <!-- PRE-FILLED with user's password -->
                         <input type="password" id="login-password" required value="1234567890" class="input-field pr-10">
                         <button type="button" id="password-toggle" onclick="window.togglePasswordVisibility()" class="absolute right-0 flex items-center pr-3" style="top: 36px;">
                             <svg id="toggle-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye-off text-gray-400 hover:text-gray-600 transition">
@@ -202,13 +202,7 @@
         window.setLogLevel('debug');
 
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'esports-655bf'; 
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-        if (!firebaseConfig) {
-            console.error("Firebase configuration is missing.");
-            document.getElementById('loading-indicator').innerHTML = '<p class="text-red-600">Error: Firebase configuration not found. Check Console setup.</p>';
-        }
 
         let db, auth, userId = null;
         let isAdmin = false;
@@ -220,6 +214,30 @@
          * Initializes Firebase and authenticates the user.
          */
         const initializeAndAuthenticate = async () => {
+            let firebaseConfig = null;
+            try {
+                // Safely parse the config variable provided by the environment
+                if (typeof __firebase_config !== 'undefined') {
+                    const parsed = JSON.parse(__firebase_config);
+                    // Ensure the parsed object is not null and has keys
+                    if (parsed && Object.keys(parsed).length > 0) {
+                        firebaseConfig = parsed;
+                    }
+                }
+            } catch (e) {
+                console.error("Error parsing Firebase configuration:", e);
+            }
+
+            // CRITICAL CHECK: If config is still missing or invalid, display the fatal error message.
+            if (!firebaseConfig) {
+                console.error("Firebase configuration is missing or invalid. Cannot initialize app.");
+                document.getElementById('loading-indicator').innerHTML = `
+                    <p class="text-red-600 font-bold text-xl">FATAL ERROR: Firebase Configuration Failure</p>
+                    <p class="text-base text-gray-700 mt-2">The required environment variable for Firebase setup is missing or empty. Please ensure your project environment is correctly configured.</p>
+                `;
+                return; // Stop execution if config is bad
+            }
+
             try {
                 const app = window.initializeApp(firebaseConfig);
                 db = window.getFirestore(app);
@@ -236,7 +254,6 @@
                     if (user) {
                         userId = user.uid;
                         // Check if the current user is the admin (only possible if signed in via email/password)
-                        // Note: user.email is usually normalized to lowercase by Firebase
                         isAdmin = user.email === ADMIN_EMAIL;
                         
                         document.getElementById('user-id-display').textContent = userId;
@@ -283,9 +300,9 @@
             } catch (error) {
                 console.error("Login error:", error.code, error.message);
                 
-                let friendlyMessage = "Login failed. Please check your email and password in the form.";
+                let friendlyMessage = "Login failed. Please verify the user exists with the *exact* lowercase email and password in the Firebase Console.";
                 if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-                    friendlyMessage = "Invalid credentials. Please verify the user exists with the *exact* email and password in the Firebase Console.";
+                    friendlyMessage = "Invalid credentials. Please verify the user exists with the *exact* lowercase email and password in the Firebase Console.";
                 }
 
                 messageBox.textContent = friendlyMessage;
@@ -639,3 +656,4 @@
     </script>
 </body>
 </html>
+
